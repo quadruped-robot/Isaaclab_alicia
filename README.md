@@ -1,3 +1,6 @@
+# Isaaclab_alicia
+alicia机械臂的强化学习训练
+
 # Template for Isaac Lab Projects
 
 ## Overview
