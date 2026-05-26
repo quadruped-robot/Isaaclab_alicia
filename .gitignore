@@ -9,10 +9,10 @@
 **/.thumbs
 
 # No USD files allowed in the repo
-**/*.usd
-**/*.usda
-**/*.usdc
-**/*.usdz
+#**/*.usd
+#**/*.usda
+#**/*.usdc
+#**/*.usdz
 
 # Python
 .DS_Store
@@ -35,23 +35,23 @@ docker/.container.cfg
 !.vscode
 
 # Outputs
-**/output/*
-**/outputs/*
-**/videos/*
-**/wandb/*
-**/.neptune/*
-docker/artifacts/
-*.tmp
+#**/output/*
+#**/outputs/*
+#**/videos/*
+#**/wandb/*
+#**/.neptune/*
+#docker/artifacts/
+Q#*.tmp
 
 # Doc Outputs
 **/docs/_build/*
 **/generated/*
 
 # Isaac-Sim packman
-_isaac_sim*
-_repo
-_build
-.lastformat
+#_isaac_sim*
+#_repo
+#_build
+#.lastformat
 
 # RL-Games
 **/runs/*
