@@ -1,11 +1,3 @@
-# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
-# SPDX-License-Identifier: BSD-3-Clause
-#
-# Alicia_duo 6+2 DoF reach environment.
-# Migrated from the MuJoCo + SB3-TD3 project under
-# `mechanical arm/zero-robotic-arm/5. Deep_LR/`.
-# First phase: reach-only (gripper is an action dim but not part of reward).
-
 from __future__ import annotations
 
 import os
@@ -27,19 +19,22 @@ ALICIA_DUO_CFG = ArticulationCfg(
     prim_path="/World/envs/env_.*/Robot",
     spawn=sim_utils.UsdFileCfg(
         usd_path=_USD_PATH,
-        activate_contact_sensors=False,
+        activate_contact_sensors=False,#是否启用接触传感器
+        # ===== 刚体物理属性 =====
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
             max_depenetration_velocity=5.0,
         ),
+        # ===== 关节链（Articulation）属性 =====
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False,
-            solver_position_iteration_count=12,
-            solver_velocity_iteration_count=1,
+            enabled_self_collisions=False,  #是否启用自碰撞
+            solver_position_iteration_count=12,  #位置求解器迭代次数
+            solver_velocity_iteration_count=1,  #速度求解器迭代次数
         ),
     ),
+     # ===== 初始状态配置 =====
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.0),
+        pos=(0.0, 0.0, 0.0),  #机器人在世界坐标系中的位置（x, y, z）
         joint_pos={
             "Joint1": 0.0,
             "Joint2": 0.0,
@@ -47,23 +42,26 @@ ALICIA_DUO_CFG = ArticulationCfg(
             "Joint4": 0.0,
             "Joint5": 0.0,
             "Joint6": 0.0,
-            "left_finger": 0.0,
-            "right_finger": 0.0,
+            "left_finger": 0.0,  #夹爪左指的初始位置（通常为0表示张开）
+            "right_finger": 0.0,  #夹爪右指的初始位置（通常为0表示张开）
         },
     ),
+     # ===== 执行器（电机）配置 =====
     actuators={
+        # ---------- 手臂执行器 ----------
         "arm": ImplicitActuatorCfg(
             joint_names_expr=["Joint[1-6]"],
-            effort_limit_sim=5.0,
-            velocity_limit_sim=12.0,
-            stiffness=0.0,
-            damping=0.5,
+            effort_limit_sim=5.0,  #电机在仿真中的最大扭矩限制（单位：牛顿米）
+            velocity_limit_sim=12.0,  #电机在仿真中的最大速度限制（单位：弧度/秒）
+            stiffness=0.0,  #弹簧刚度（单位：牛顿米/弧度），0表示无弹簧力
+            damping=0.5,  #阻尼系数（单位：牛顿米/弧度/秒），用于模拟关节的摩擦和能量耗散
         ),
         # Gripper: small return-to-centre spring (stiffness=20) so the
         # fingers don't drift asymmetrically under arm-induced vibrations
         # when Phase 1 leaves torque=0. The max spring force at full travel
         # is 20 * 0.05 = 1 N*m -- easily overpowered by the 5 N*m effort
         # limit, so Phase 2 grasp control is unaffected.
+        # ---------- 夹爪执行器（Phase 1特殊处理）----------
         "gripper": ImplicitActuatorCfg(
             joint_names_expr=["left_finger", "right_finger"],
             effort_limit_sim=5.0,
@@ -76,147 +74,94 @@ ALICIA_DUO_CFG = ArticulationCfg(
 
 
 @configclass
-class IsaaclabAliciaEnvCfg(DirectRLEnvCfg):
-    # ---- core ----
-    decimation = 2
+class IsaaclabAliciaEnvCfg(DirectRLEnvCfg):  #继承自DirectRLEnvCfg，表示Isaaclab Alicia环境的配置类
+    # ==================== 核心控制参数 ====================
+    decimation = 2  #控制频率与仿真频率的比率。仿真频率为120 Hz，控制频率为60 Hz（120 / 2）。
     episode_length_s = 4.0  # 4s episode @ 60 Hz control -> 240 steps
 
-    # action: 8 torques (arm 6 + gripper 2), policy outputs in [-1, 1]
+    # ==================== 动作与观测空间 ====================
     action_space = 8
     # obs = relative_pos(3) + joint_pos(8) + joint_vel(8) + prev_action(8) + ee_vel(3) = 30
     observation_space = 30
     state_space = 0
 
-    # ---- simulation ----
+    # ==================== 仿真配置 ====================
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120,
-        render_interval=decimation,
+        dt=1 / 120,  #仿真时间步长为1/120秒，即仿真频率为120 Hz
+        render_interval=decimation,  #每隔decimation个仿真步骤进行一次渲染，即每隔2个仿真步骤渲染一次，渲染频率为60 Hz
         physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-            restitution=0.0,
+            friction_combine_mode="multiply",  #摩擦力的组合模式，"multiply"表示两个接触物体的摩擦系数相乘
+            restitution_combine_mode="multiply",  #弹性恢复系数的组合模式，"multiply"表示两个接触物体的弹性恢复系数相乘
+            static_friction=1.0,  #静摩擦系数，表示物体在开始滑动前的摩擦力大小
+            dynamic_friction=1.0,  #动摩擦系数，表示物体在滑动时的摩擦力大小
+            restitution=0.0,  #弹性恢复系数，表示物体碰撞后的反弹程度，0表示完全没有弹性（即不反弹）
         ),
     )
 
-    # ---- robot + scene ----
-    robot_cfg: ArticulationCfg = ALICIA_DUO_CFG
+    # ==================== 机器人与场景 ====================
+    robot_cfg: ArticulationCfg = ALICIA_DUO_CFG  #使用之前定义的ALICIA_DUO_CFG作为机器人配置
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        num_envs=4096, env_spacing=2.0, replicate_physics=True
+        num_envs=4096, env_spacing=2.0, replicate_physics=True  #并行环境数：4096个环境同时训练,每个环境之间的间距为2.0米，物理属性在所有环境中复制（即每个环境中的物体具有相同的物理属性）
     )
 
-    # ---- joint names (resolved at env init via find_joints / find_bodies) ----
+    # ==================== 关节与末端执行器命名 ====================
     arm_joint_names = ["Joint1", "Joint2", "Joint3", "Joint4", "Joint5", "Joint6"]
     gripper_joint_names = ["left_finger", "right_finger"]
-    # `tool0` was a fixed leaf in the URDF and got merged into Link6 by --merge-joints.
-    # End-effector pose = Link6 pose composed with this offset.
-    #
-    # The URDF's Grasp2tool joint placed tool0 at z=0.13118 in Link6 frame,
-    # i.e. the OUTER tip of the fingers. We aim slightly inward of that
-    # (toward the grasp centre between the two fingers) so a closing
-    # gripper actually wraps the ball. Empirically 0.10 hits the sweet
-    # spot: closer than the finger tip but not so far in that targets at
-    # the edge of the sampled shell become unreachable.
-    ee_body_name = "Link6"
-    ee_offset_local = (-0.0002, -0.0003, 0.10)
+
+    # 末端执行器定义（URDF转换后的适配）
+    ee_body_name = "Link6"  #末端执行器所在的链接名称
+    ee_offset_local = (-0.0002, -0.0003, 0.10)  #末端执行器相对于Link6的局部偏移，单位为米。这个偏移将末端执行器定义在Link6的前方0.10米处，稍微向内侧（-0.0002, -0.0003）以便更好地抓取目标。
 
     # ---- action scaling ----
     # Policy outputs in [-1, 1]; multiply to get N*m. effort_limit_sim already
     # caps this in PhysX, so we choose 5.0 to match the joint effort limit.
-    action_scale_arm = 5.0
-    action_scale_gripper = 5.0
+    action_scale_arm = 5.0  #将策略输出的动作值（在[-1, 1]范围内）乘以5.0，以将其转换为实际的关节扭矩（单位：牛顿米）。这个缩放因子与之前定义的关节执行器的effort_limit_sim一致，确保动作值不会超过物理仿真中的最大扭矩限制。
+    action_scale_gripper = 5.0  #同样地，将策略输出的夹爪动作值乘以5.0，以将其转换为实际的夹爪扭矩（单位：牛顿米）。这个缩放因子也与夹爪执行器的effort_limit_sim一致，确保夹爪动作值不会超过物理仿真中的最大扭矩限制。
+    
+    # ==================== 目标采样参数 ====================
+    # 在机械臂工作空间内采样目标位置（球壳分布）
+    target_r_min = 0.18         # 最小半径0.18m（距基座）
+    target_r_max = 0.35         # 最大半径0.35m（距基座）
+    target_elev_min = -0.17     # 最小高度角[-0.17]（约-10度，略低于地平线）
+    target_elev_max = 0.87      # 最大高度角[0.87]（约50度，高于地平线）
+    target_center_z = 0.20      # 工作空间中心高度[0.20]（约肩部高度）
+    target_z_min = 0.05         # 目标最小高度[0.05]（避免目标接触地面）
 
-    # ---- target sampling (spherical shell around the base) ----
-    # IsaacLab cannot refresh body_pos_w without a physics step, so the original
-    # MuJoCo FK-based sampling can't be ported verbatim. Instead we sample
-    # uniformly inside a known-reachable shell. Tune ranges if the policy
-    # plateaus on harder targets.
-    target_r_min = 0.18         # min radius from base [m]
-    target_r_max = 0.35         # max radius from base [m] (shrunk a bit so
-                                # the new inward ee_offset still keeps the
-                                # whole shell reachable)
-    target_elev_min = -0.17     # min elevation [rad] (~ -10 deg, slightly below horizon)
-    target_elev_max = 0.87      # max elevation [rad] (~ 50 deg, above-horizon)
-    target_center_z = 0.20      # workspace center height [m] (~ shoulder)
-    target_z_min = 0.05         # final z clamp to keep targets off the ground
+    # ==================== 奖励函数配置 ====================
+     # 距离阈值定义
+    success_threshold = 0.01    # 成功阈值：1cm（用于日志和奖励放大）
+    close_threshold = 0.05      # 接近阈值：5cm
 
-    # ---- reward / termination (reach-only, dense PPO-friendly variant) ----
-    # Route B: continuous distance shaping + close/success tier amplifiers.
-    # Replaces the original TD3-tuned discrete 7-phase ladder which made PPO
-    # plateau at ~0.2 m because the gradient flattens between phase steps.
-    #
-    # Per-step magnitudes when policy is reasonable:
-    #   dist_reward in [0.04 .. 1.0]  (×2 below close_threshold, ×4 below success_threshold)
-    #   step_penalty -0.001
-    #   direction <= 0.1
-    #   regularization terms ~ -0.005
-    # Episode return for a quick reach ~50 + dist_shaping; baseline drifters ~ +20.
+    # 基础惩罚（鼓励快速完成）
+    rew_step_penalty = 0.001          # 每一步的基础惩罚，鼓励快速完成任务
+    rew_dist_gain = 0.5               # 距离奖励增益，控制距离奖励的总体规模
+    rew_dist_beta = 2.0               # 距离奖励的平滑度参数，较高的值使奖励在接近目标时更陡峭
+    rew_close_multiplier = 1.5        # 接近奖励乘数，距离在close_threshold内时，距离奖励乘以这个因子，鼓励机器人更接近目标
+    rew_success_multiplier = 8.0      # 成功奖励乘数，距离在success_threshold内时，距离奖励乘以这个因子，给予成功完成任务的显著奖励
+    # 运动质量奖励
+    rew_direction_gain = 0.05         # 方向奖励增益，控制方向奖励的总体规模。这个奖励鼓励机器人在接近目标时朝正确的方向移动。
+    rew_speed_threshold = 1.0         # 速度奖励的速度阈值，单位为m/s。只有当末端执行器的速度小于这个阈值时，才会给予速度奖励。这有助于防止机器人以过快的速度接近目标，从而保持稳定和安全。
+    rew_speed_penalty = 0.01          # 速度惩罚增益，控制速度惩罚的总体规模。这个惩罚鼓励机器人以适当的速度接近目标，避免过快或过慢。
 
-    # Reach reward shape (no terminating success: hovering just outside the
-    # success threshold to milk the per-step bonus was the previous failure
-    # mode -- terminating on reach made the early-exit bonus smaller than the
-    # accumulated hover reward). Episodes only end on timeout now, and a
-    # large multiplier inside the success threshold pulls the policy through
-    # the last few cm.
-    success_threshold = 0.02    # 2 cm reach (used by logging + the inner amplifier)
-    close_threshold = 0.05      # 5 cm "close" tier
+    # 姿态对齐奖励（关键创新）
+    rew_gripper_align_gain = 0.25     # 对齐奖励增益，控制对齐奖励的总体规模。这个奖励鼓励机器人将夹爪朝向目标，从而提高抓取成功率。（降低以减少旋转）
 
-    # Reward magnitudes deliberately kept modest. PPO normalizes advantages
-    # per batch, so absolute scale doesn't matter -- but the *ratio* between
-    # rewards and penalties does. Previously dist+settle dominated the return
-    # at ~3800 vs ~-20 of regularization, making wrist/asymmetry penalties
-    # invisible (0.5% of total) and producing slack behaviour around target.
-    # The shrunken main rewards bring that ratio to ~10:1, so the soft
-    # constraints actually matter once the arm is on target.
-    rew_step_penalty = 0.001          # subtracted each step
-    rew_dist_gain = 0.5               # peak coefficient of dist_reward
-    rew_dist_beta = 2.0               # controls width of 1/(1+(beta*d)^2) curve
-    rew_close_multiplier = 1.5        # smaller bonus for "close" -- discourages hovering
-    rew_success_multiplier = 8.0      # large bonus inside success threshold
-
-    rew_direction_gain = 0.05         # cos^2 of (ee_vel, to_target)
-    rew_speed_threshold = 1.0         # ee_speed beyond this -> penalty
-    rew_speed_penalty = 0.01
-
-    # Gripper-orientation reward: signed cos^2 between Link6's local +z
-    # (the gripper-forward axis) and the unit vector from the EE to the
-    # target. Pointing away from the target is penalised (not just "zero
-    # reward"), so the policy is forced to align even at the cost of using
-    # wrist DoF -- which is exactly the "use wrist only when necessary"
-    # behaviour the user asked for.
-    rew_gripper_align_gain = 0.5
-
-    # Per-centimetre one-shot bonuses inside `close_threshold`. The dense
-    # distance reward is smooth but its gradient is gentle near zero; these
-    # discrete tiers give the policy a sharp incentive to keep closing the
-    # last few cm rather than orbit at ~4 cm.
+    # 接近阶段奖励：在接近阶段内，根据距离给予额外奖励，鼓励机器人更快地进入成功区域。距离越接近成功阈值，奖励越高。
     rew_close_phase_thresholds = (0.04, 0.03, 0.02, 0.01)
     rew_close_phase_rewards = (1.0, 2.0, 3.0, 5.0)
 
-    rew_joint_vel_change = 0.001      # subtract gain * sum|delta qvel|
+    # 平滑性惩罚
+    rew_joint_vel_change = 0.001      # 关节速度变化惩罚（鼓励平滑）
 
-    # Wrist suppression -- soft, not hard. Reach only needs J1/2/3, but
-    # J4/5/6 must stay available for Phase 2 (grasping in cluttered scenes)
-    # AND for aiming the gripper at off-axis targets.
-    #
-    # With the signed alignment reward, the policy is strongly incentivised
-    # to point at the target, so wrist movement happens when needed. These
-    # penalties shape *how much* wrist is used: any wrist deflection beyond
-    # what is needed for alignment is unrewarded and costs ~`rew_wrist_pos`
-    # per radian per step. Together with the alignment reward, the policy's
-    # optimum is "use the minimum wrist angle that yields cos~=1".
-    rew_wrist_action = 0.05           # |a[3]| + |a[4]| + |a[5]|
-    rew_wrist_pos = 0.15              # |q[J4]| + |q[J5]| + |q[J6]|
-    rew_wrist_vel = 0.02              # |qvel[J4]| + |qvel[J5]| + |qvel[J6]|
+    # 手腕正则化（软约束）
+    rew_wrist_action = 0.12           # 手腕动作惩罚，鼓励手腕关节（J4, J5, J6）动作较小（增强以防止旋转）
+    rew_wrist_pos = 0.35              # 手腕位置惩罚，鼓励手腕关节（J4, J5, J6）位置较小（即更伸展）（大幅增强）
+    rew_wrist_vel = 0.05              # 手腕速度惩罚，鼓励手腕关节（J4, J5, J6）速度较小（增强）
 
-    # Gripper symmetry: substitute for the MuJoCo <equality> coupling the
-    # URDF -> USD pipeline dropped. left_finger = -right_finger is the
-    # symmetric-close condition; their sum (in radians) is the asymmetry.
-    rew_gripper_asymmetry = 5.0       # |q[left_finger] + q[right_finger]|
+    # 夹爪对称性惩罚（替代URDF缺失的等式约束）
+    rew_gripper_asymmetry = 8.0       # 左右手指不对称惩罚（增强以防止旋转）
 
-    # Settle bonus: extra reward when both within success threshold and
-    # near-stationary. Scaled down with the rest of the positive rewards so
-    # regularisation penalties are not buried by it.
-    rew_settle_speed_threshold = 0.05  # m/s; ee considered "settled" below this
-    rew_settle_bonus = 4.0             # added per step when settled inside success
+    # 稳定奖励：当机械臂既处于成功阈值范围内，又近乎静止时，额外发放奖励。
+    # 该奖励与其他正向奖励一同做了幅度缩减，避免其数值过大而掩盖正则化惩罚项的作用。
+    rew_settle_speed_threshold = 0.12  # 稳定速度阈值（m/s）（增加以更容易获得稳定奖励）
+    rew_settle_bonus = 8.0             # 稳定奖励（在成功阈值内且低速时）（翻倍以鼓励停留）
