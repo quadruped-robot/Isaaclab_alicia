@@ -142,7 +142,7 @@ hydra:
       schema: structured
       provider: schema
     output_dir: /home/spy/graduate_student/quadruped_robot/Reinforcement_Learning/mechanical
-      arm/Isaaclab_alicia/outputs/2026-05-25/23-54-16
+      arm/Isaaclab_alicia/outputs/2026-05-28/21-03-47
     choices:
       hydra/env: default
       hydra/callbacks: null

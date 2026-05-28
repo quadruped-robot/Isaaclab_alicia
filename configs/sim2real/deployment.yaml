@@ -1,0 +1,22 @@
+runtime:
+  control_hz: 60.0
+  obs_latency_frames: 1
+  act_latency_frames: 1
+
+observation:
+  observation_dim: 30
+  action_dim: 8
+  joint_dim: 8
+
+action:
+  action_gain_arm: 0.035
+  action_gain_gripper: 0.015
+  dq_limit_arm: 0.08
+  dq_limit_gripper: 0.04
+  enable_gripper: false
+
+safety:
+  joint_limit_margin: 0.03
+  watchdog_timeout_s: 0.2
+  hold_on_timeout: true
+  finite_check: true

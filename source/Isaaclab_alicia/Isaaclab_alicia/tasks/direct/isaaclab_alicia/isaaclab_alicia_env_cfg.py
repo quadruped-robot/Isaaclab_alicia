@@ -117,7 +117,49 @@ class IsaaclabAliciaEnvCfg(DirectRLEnvCfg):  #继承自DirectRLEnvCfg，表示Is
     # caps this in PhysX, so we choose 5.0 to match the joint effort limit.
     action_scale_arm = 5.0  #将策略输出的动作值（在[-1, 1]范围内）乘以5.0，以将其转换为实际的关节扭矩（单位：牛顿米）。这个缩放因子与之前定义的关节执行器的effort_limit_sim一致，确保动作值不会超过物理仿真中的最大扭矩限制。
     action_scale_gripper = 5.0  #同样地，将策略输出的夹爪动作值乘以5.0，以将其转换为实际的夹爪扭矩（单位：牛顿米）。这个缩放因子也与夹爪执行器的effort_limit_sim一致，确保夹爪动作值不会超过物理仿真中的最大扭矩限制。
-    
+    # Reach 阶段夹爪保持在中位，抑制由手臂加减速耦合引入的轻微抖动
+    gripper_hold_kp = 35.0
+    gripper_hold_kd = 3.0
+    gripper_hold_torque_limit = 2.0
+    # 到位自动闭合（默认关闭）：达到触发距离后直接给夹爪闭合指令。
+    # 为避免阈值附近反复开合，使用 close/reopen 双阈值（迟滞）。
+    enable_auto_gripper_close = False
+    gripper_close_trigger_dist = 0.018
+    gripper_reopen_trigger_dist = 0.028
+    gripper_close_torque = 2.0
+
+    # ==================== Sim-to-Real 鲁棒训练参数 ====================
+    # 随机化总开关：默认关闭，先保证 reach baseline 收敛稳定；
+    # 需要 sim2real 训练时再显式开启。
+    enable_sim2real_randomization = False
+    # 观测延迟：按环境随机取整帧数 [min, max]
+    obs_latency_steps_min = 0
+    obs_latency_steps_max = 2
+    # 动作执行延迟：按环境随机取整帧数 [min, max]
+    act_latency_steps_min = 0
+    act_latency_steps_max = 1
+    # 执行链路扰动：随机丢包 + 动作噪声（归一化动作空间）
+    action_dropout_prob = 0.01
+    action_noise_std = 0.02
+    # 目标附近抑制随机扰动，避免“已到位仍被噪声推走”
+    randomization_near_disable_dist = 0.04
+    randomization_near_noise_scale = 0.2
+    # 执行器增益随机化（用于模拟摩擦、模型误差和驱动衰减）
+    actuator_arm_gain_range = (0.85, 1.15)
+    actuator_gripper_gain_range = (0.90, 1.10)
+    # 观测噪声与偏置（传感器噪声 + 零点偏差）
+    obs_joint_pos_noise_std = 0.003
+    obs_joint_vel_noise_std = 0.03
+    obs_ee_vel_noise_std = 0.02
+    obs_target_pos_noise_std = 0.002
+    obs_joint_pos_bias_range = (-0.01, 0.01)
+    obs_joint_vel_bias_range = (-0.08, 0.08)
+    # 动力学随机化占位（默认关闭，防止依赖底层 API 版本差异）
+    randomize_joint_friction = False
+    joint_friction_scale_range = (0.9, 1.1)
+    randomize_payload_mass = False
+    payload_mass_delta_range = (-0.05, 0.05)
+
     # ==================== 目标采样参数 ====================
     # 在机械臂工作空间内采样目标位置（球壳分布）
     target_r_min = 0.18         # 最小半径0.18m（距基座）
@@ -144,7 +186,7 @@ class IsaaclabAliciaEnvCfg(DirectRLEnvCfg):  #继承自DirectRLEnvCfg，表示Is
     rew_speed_penalty = 0.01          # 速度惩罚增益，控制速度惩罚的总体规模。这个惩罚鼓励机器人以适当的速度接近目标，避免过快或过慢。
 
     # 姿态对齐奖励（关键创新）
-    rew_gripper_align_gain = 0.25     # 对齐奖励增益，控制对齐奖励的总体规模。这个奖励鼓励机器人将夹爪朝向目标，从而提高抓取成功率。（降低以减少旋转）
+    rew_gripper_align_gain = 0.5      # 对齐奖励增益，控制对齐奖励的总体规模。这个奖励鼓励机器人将夹爪朝向目标，从而提高抓取成功率。
 
     # 接近阶段奖励：在接近阶段内，根据距离给予额外奖励，鼓励机器人更快地进入成功区域。距离越接近成功阈值，奖励越高。
     rew_close_phase_thresholds = (0.04, 0.03, 0.02, 0.01)
@@ -152,16 +194,23 @@ class IsaaclabAliciaEnvCfg(DirectRLEnvCfg):  #继承自DirectRLEnvCfg，表示Is
 
     # 平滑性惩罚
     rew_joint_vel_change = 0.001      # 关节速度变化惩罚（鼓励平滑）
+    rew_action_rate = 0.01            # 相邻两步动作变化惩罚（抑制真机抖振）
 
     # 手腕正则化（软约束）
-    rew_wrist_action = 0.12           # 手腕动作惩罚，鼓励手腕关节（J4, J5, J6）动作较小（增强以防止旋转）
-    rew_wrist_pos = 0.35              # 手腕位置惩罚，鼓励手腕关节（J4, J5, J6）位置较小（即更伸展）（大幅增强）
-    rew_wrist_vel = 0.05              # 手腕速度惩罚，鼓励手腕关节（J4, J5, J6）速度较小（增强）
+    rew_wrist_action = 0.05           # 手腕动作惩罚，鼓励手腕关节（J4, J5, J6）动作较小
+    rew_wrist_pos = 0.15              # 手腕位置惩罚，鼓励手腕关节（J4, J5, J6）位置较小（即更伸展）
+    rew_wrist_vel = 0.02              # 手腕速度惩罚，鼓励手腕关节（J4, J5, J6）速度较小
 
     # 夹爪对称性惩罚（替代URDF缺失的等式约束）
-    rew_gripper_asymmetry = 8.0       # 左右手指不对称惩罚（增强以防止旋转）
+    rew_gripper_asymmetry = 5.0       # 左右手指不对称惩罚
 
     # 稳定奖励：当机械臂既处于成功阈值范围内，又近乎静止时，额外发放奖励。
     # 该奖励与其他正向奖励一同做了幅度缩减，避免其数值过大而掩盖正则化惩罚项的作用。
-    rew_settle_speed_threshold = 0.12  # 稳定速度阈值（m/s）（增加以更容易获得稳定奖励）
-    rew_settle_bonus = 8.0             # 稳定奖励（在成功阈值内且低速时）（翻倍以鼓励停留）
+    rew_settle_speed_threshold = 0.05  # 稳定速度阈值（m/s）
+    rew_settle_bonus = 4.0             # 稳定奖励（在成功阈值内且低速时）
+    # 目标附近动作柔化：抑制到位后的过冲和抖动
+    near_target_dist = 0.05
+    near_target_action_scale = 0.35
+    near_target_action_deadband = 0.03
+    # 高于速度阈值时，按超量连续惩罚，避免极端大速度冲击
+    rew_speed_excess = 0.01

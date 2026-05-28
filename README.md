@@ -309,3 +309,51 @@ torch              (随 IsaacLab，cu126)
 6. 出现"成功率突降"、"align_cos 变负"、"机械臂乱转/抖"等异常，先查本文档第六节 bug 记录
 
 如果换机械臂：换 URDF 路径 + 关节名（`arm_joint_names` / `gripper_joint_names` / `ee_body_name` / `ee_offset_local`）+ 重转 USD + 重新调 `target_r_*` 球壳即可。
+
+---
+
+## 九、Sim-to-Real 新增工具（2026-05-28）
+
+### 1. 训练侧：已加入鲁棒随机化（默认开启）
+
+`source/Isaaclab_alicia/Isaaclab_alicia/tasks/direct/isaaclab_alicia/isaaclab_alicia_env_cfg.py` 新增：
+
+- 动作延迟：`act_latency_steps_min/max`
+- 观测延迟：`obs_latency_steps_min/max`
+- 动作扰动：`action_dropout_prob`、`action_noise_std`
+- 执行器增益随机化：`actuator_arm_gain_range`、`actuator_gripper_gain_range`
+- 观测噪声/偏置：`obs_joint_*_noise_std`、`obs_joint_*_bias_range`
+- 新奖励项：`rew_action_rate`、`rew_speed_excess`
+
+对应环境实现位于 `isaaclab_alicia_env.py`，已完成：
+- per-env 随机延迟队列（action/observation）
+- per-env 增益随机化与观测噪声注入
+- 动作变化率惩罚（抑制真机抖振）
+
+### 2. 部署侧：统一 I/O 适配与安全守护
+
+新增模块：`Isaaclab_alicia.deployment`
+
+- `build_observation(...)`：按训练同构方式拼 30 维观测
+- `action_to_position_cmd(...)`：将 policy 动作映射到关节位置增量命令
+- `safety_guard(...)`：执行有限值检查、增量限幅、关节限位裁剪、超时保持
+
+默认部署配置：
+`configs/sim2real/deployment.yaml`
+
+可生成新模板：
+```bash
+python scripts/sim2real/create_deployment_config.py --output configs/sim2real/deployment.generated.yaml
+```
+
+### 3. 导出一致性校验（上机前必跑）
+
+```bash
+python scripts/sim2real/validate_policy_export.py \
+  --torch_policy logs/rsl_rl/alicia_duo_reach/<run>/exported/policy.pt \
+  --onnx_policy  logs/rsl_rl/alicia_duo_reach/<run>/exported/policy.onnx \
+  --obs_dim 30 \
+  --samples 1024
+```
+
+通过标准：脚本返回 `Validation passed`，并输出 `max_abs_err / mean_abs_err`。

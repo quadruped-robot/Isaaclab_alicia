@@ -232,13 +232,44 @@ env:
   - 0.1
   action_scale_arm: 5.0
   action_scale_gripper: 5.0
+  enable_sim2real_randomization: true
+  obs_latency_steps_min: 0
+  obs_latency_steps_max: 2
+  act_latency_steps_min: 0
+  act_latency_steps_max: 1
+  action_dropout_prob: 0.02
+  action_noise_std: 0.03
+  actuator_arm_gain_range:
+  - 0.85
+  - 1.15
+  actuator_gripper_gain_range:
+  - 0.9
+  - 1.1
+  obs_joint_pos_noise_std: 0.003
+  obs_joint_vel_noise_std: 0.03
+  obs_ee_vel_noise_std: 0.02
+  obs_target_pos_noise_std: 0.002
+  obs_joint_pos_bias_range:
+  - -0.01
+  - 0.01
+  obs_joint_vel_bias_range:
+  - -0.08
+  - 0.08
+  randomize_joint_friction: false
+  joint_friction_scale_range:
+  - 0.9
+  - 1.1
+  randomize_payload_mass: false
+  payload_mass_delta_range:
+  - -0.05
+  - 0.05
   target_r_min: 0.18
   target_r_max: 0.35
   target_elev_min: -0.17
   target_elev_max: 0.87
   target_center_z: 0.2
   target_z_min: 0.05
-  success_threshold: 0.02
+  success_threshold: 0.01
   close_threshold: 0.05
   rew_step_penalty: 0.001
   rew_dist_gain: 0.5
@@ -248,7 +279,7 @@ env:
   rew_direction_gain: 0.05
   rew_speed_threshold: 1.0
   rew_speed_penalty: 0.01
-  rew_gripper_align_gain: 0.5
+  rew_gripper_align_gain: 0.25
   rew_close_phase_thresholds:
   - 0.04
   - 0.03
@@ -260,12 +291,14 @@ env:
   - 3.0
   - 5.0
   rew_joint_vel_change: 0.001
-  rew_wrist_action: 0.05
-  rew_wrist_pos: 0.15
-  rew_wrist_vel: 0.02
-  rew_gripper_asymmetry: 5.0
-  rew_settle_speed_threshold: 0.05
-  rew_settle_bonus: 4.0
+  rew_action_rate: 0.01
+  rew_wrist_action: 0.12
+  rew_wrist_pos: 0.35
+  rew_wrist_vel: 0.05
+  rew_gripper_asymmetry: 8.0
+  rew_settle_speed_threshold: 0.12
+  rew_settle_bonus: 8.0
+  rew_speed_excess: 0.01
 agent:
   seed: 42
   device: cuda:0
